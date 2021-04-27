@@ -28,3 +28,12 @@ Tricks in official paper:
 
 <tr><th align="left" bgcolor=#f8f8f8> Our YOLOv2-608</th><td bgcolor=white> COCO eval </td><td bgcolor=white> 29.2 </td><td bgcolor=white> 51.6 </td><td bgcolor=white> 29.1 </td><td bgcolor=white> 13.6 </td><td bgcolor=white> 36.8 </td><td bgcolor=white> 40.5 </td></tr>
 </table></tbody>
+
+
+# Model
+
+Everyone can download my model files from BaiduYunDisk:
+
+Link: https://pan.baidu.com/s/1NmdqPwAmirknO5J__lg5Yw 
+
+Password: hlt6 
