@@ -7,15 +7,15 @@ import torch.nn.functional as F
 ignore_thresh = IGNORE_THRESH
 
 
-class MSELoss(nn.Module):
+class MSEWithLogitsLoss(nn.Module):
     def __init__(self, reduction='mean'):
-        super(MSELoss, self).__init__()
+        super(MSEWithLogitsLoss, self).__init__()
         self.reduction = reduction
 
     def forward(self, logits, targets, mask):
         inputs = torch.clamp(torch.sigmoid(logits), min=1e-4, max=1.0 - 1e-4)
 
-        # We ignore those whose tarhets == -1.0. 
+        # 被忽略的先验框的mask都是-1，不参与loss计算
         pos_id = (mask==1.0).float()
         neg_id = (mask==0.0).float()
         pos_loss = pos_id * (inputs - targets)**2
@@ -33,17 +33,17 @@ class MSELoss(nn.Module):
 
 
 def compute_iou(anchor_boxes, gt_box):
+    """计算先验框和真实框之间的IoU
+    Input: \n
+        anchor_boxes: [N, 4] \n
+              gt_box: [N, 1] \n
+    Output: \n
+                iou : [1, 4] \n
     """
-    Input:
-        anchor_boxes : ndarray -> [[c_x_s, c_y_s, anchor_w, anchor_h], ..., [c_x_s, c_y_s, anchor_w, anchor_h]].
-        gt_box : ndarray -> [c_x_s, c_y_s, anchor_w, anchor_h].
-    Output:
-        iou : ndarray -> [iou_1, iou_2, ..., iou_m], and m is equal to the number of anchor boxes.
-    """
-    # compute the iou between anchor box and gt box
-    # First, change [c_x_s, c_y_s, anchor_w, anchor_h] ->  [xmin, ymin, xmax, ymax]
+
     # anchor box :
     ab_x1y1_x2y2 = np.zeros([len(anchor_boxes), 4])
+    # 计算先验框的左上角点坐标和右下角点坐标
     ab_x1y1_x2y2[:, 0] = anchor_boxes[:, 0] - anchor_boxes[:, 2] / 2  # xmin
     ab_x1y1_x2y2[:, 1] = anchor_boxes[:, 1] - anchor_boxes[:, 3] / 2  # ymin
     ab_x1y1_x2y2[:, 2] = anchor_boxes[:, 0] + anchor_boxes[:, 2] / 2  # xmax
@@ -51,17 +51,18 @@ def compute_iou(anchor_boxes, gt_box):
     w_ab, h_ab = anchor_boxes[:, 2], anchor_boxes[:, 3]
     
     # gt_box : 
-    # We need to expand gt_box(ndarray) to the shape of anchor_boxes(ndarray), in order to compute IoU easily. 
+    # 我们将真实框扩展成[N, 4], 便于计算IoU. 
     gt_box_expand = np.repeat(gt_box, len(anchor_boxes), axis=0)
 
     gb_x1y1_x2y2 = np.zeros([len(anchor_boxes), 4])
+    # 计算真实框的左上角点坐标和右下角点坐标
     gb_x1y1_x2y2[:, 0] = gt_box_expand[:, 0] - gt_box_expand[:, 2] / 2 # xmin
     gb_x1y1_x2y2[:, 1] = gt_box_expand[:, 1] - gt_box_expand[:, 3] / 2 # ymin
     gb_x1y1_x2y2[:, 2] = gt_box_expand[:, 0] + gt_box_expand[:, 2] / 2 # xmax
     gb_x1y1_x2y2[:, 3] = gt_box_expand[:, 1] + gt_box_expand[:, 3] / 2 # ymin
     w_gt, h_gt = gt_box_expand[:, 2], gt_box_expand[:, 3]
 
-    # Then we compute IoU between anchor_box and gt_box
+    # 计算IoU
     S_gt = w_gt * h_gt
     S_ab = w_ab * h_ab
     I_w = np.minimum(gb_x1y1_x2y2[:, 2], ab_x1y1_x2y2[:, 2]) - np.maximum(gb_x1y1_x2y2[:, 0], ab_x1y1_x2y2[:, 0])
@@ -74,14 +75,18 @@ def compute_iou(anchor_boxes, gt_box):
 
 
 def set_anchors(anchor_size):
-    """
-    Input:
-        anchor_size : list -> [[h_1, w_1], [h_2, w_2], ..., [h_n, w_n]].
-    Output:
-        anchor_boxes : ndarray -> [[0, 0, anchor_w, anchor_h],
-                                   [0, 0, anchor_w, anchor_h],
-                                   ...
-                                   [0, 0, anchor_w, anchor_h]].
+    """将输入进来的只包含wh的先验框尺寸转换成[N, 4]的ndarray类型，
+       包含先验框的中心点坐标和宽高wh，中心点坐标设为0. \n
+    Input: \n
+        anchor_size: list -> [[h_1, w_1],  \n
+                              [h_2, w_2],  \n
+                               ...,  \n
+                              [h_n, w_n]]. \n
+    Output: \n
+        anchor_boxes: ndarray -> [[0, 0, anchor_w, anchor_h], \n
+                                  [0, 0, anchor_w, anchor_h], \n
+                                  ... \n
+                                  [0, 0, anchor_w, anchor_h]]. \n
     """
     anchor_number = len(anchor_size)
     anchor_boxes = np.zeros([anchor_number, 4])
@@ -94,36 +99,41 @@ def set_anchors(anchor_size):
 
 def generate_txtytwth(gt_label, w, h, s, anchor_size):
     xmin, ymin, xmax, ymax = gt_label[:-1]
-    # compute the center, width and height
+    # 计算真实边界框的中心点和宽高
     c_x = (xmax + xmin) / 2 * w
     c_y = (ymax + ymin) / 2 * h
     box_w = (xmax - xmin) * w
     box_h = (ymax - ymin) * h
 
     if box_w < 1e-4 or box_h < 1e-4:
-        # print('A dirty data !!!')
+        # print('not a valid data !!!')
         return False    
 
-    # map the center, width and height to the feature map size
+    # 将真是边界框的尺寸映射到网格的尺度上去
     c_x_s = c_x / s
     c_y_s = c_y / s
     box_ws = box_w / s
     box_hs = box_h / s
     
-    # the grid cell location
+    # 计算中心点所落在的网格的坐标
     grid_x = int(c_x_s)
     grid_y = int(c_y_s)
-    # generate anchor boxes
+
+    # 获得先验框的中心点坐标和宽高，
+    # 这里，我们设置所有的先验框的中心点坐标为0
     anchor_boxes = set_anchors(anchor_size)
     gt_box = np.array([[0, 0, box_ws, box_hs]])
-    # compute the IoU
+
+    # 计算先验框和真实框之间的IoU
     iou = compute_iou(anchor_boxes, gt_box)
-    # We consider those anchor boxes whose IoU is more than ignore thresh,
+
+    # 只保留大于ignore_thresh的先验框去做正样本匹配,
     iou_mask = (iou > ignore_thresh)
 
     result = []
     if iou_mask.sum() == 0:
-        # We assign the anchor box with highest IoU score.
+        # 如果所有的先验框算出的IoU都小于阈值，那么就将IoU最大的那个先验框分配给正样本.
+        # 其他的先验框统统视为负样本
         index = np.argmax(iou)
         p_w, p_h = anchor_size[index]
         tx = c_x_s - grid_x
@@ -137,12 +147,9 @@ def generate_txtytwth(gt_label, w, h, s, anchor_size):
         return result
     
     else:
-        # There are more than one anchor boxes whose IoU are higher than ignore thresh.
-        # But we only assign only one anchor box whose IoU is the best(objectness target is 1) and ignore other 
-        # anchor boxes whose(we set their objectness as -1 which means we will ignore them during computing obj loss )
-        # iou_ = iou * iou_mask
-        
-        # We get the index of the best IoU
+        # 有至少一个先验框的IoU超过了阈值.
+        # 但我们只保留超过阈值的那些先验框中IoU最大的，其他的先验框忽略掉，不参与loss计算。
+        # 而小于阈值的先验框统统视为负样本。
         best_index = np.argmax(iou)
         for index, iou_m in enumerate(iou_mask):
             if iou_m:
@@ -156,37 +163,24 @@ def generate_txtytwth(gt_label, w, h, s, anchor_size):
                     
                     result.append([index, grid_x, grid_y, tx, ty, tw, th, weight, xmin, ymin, xmax, ymax])
                 else:
-                    # we ignore other anchor boxes even if their iou scores all higher than ignore thresh
+                    # 对于被忽略的先验框，我们将其权重weight设置为-1
                     result.append([index, grid_x, grid_y, 0., 0., 0., 0., -1.0, 0., 0., 0., 0.])
 
         return result 
 
 
 def gt_creator(input_size, stride, label_lists, anchor_size):
-    """
-    Input:
-        input_size : list -> the size of image in the training stage.
-        stride : int or list -> the downSample of the CNN, such as 32, 64 and so on.
-        label_list : list -> [[[xmin, ymin, xmax, ymax, cls_ind], ... ], [[xmin, ymin, xmax, ymax, cls_ind], ... ]],  
-                        and len(label_list) = batch_size;
-                            len(label_list[i]) = the number of class instance in a image;
-                            (xmin, ymin, xmax, ymax) : the coords of a bbox whose valus is between 0 and 1;
-                            cls_ind : the corresponding class label.
-    Output:
-        gt_tensor : ndarray -> shape = [batch_size, anchor_number, 1+1+4, grid_cell number ]
-    """
-    # prepare the all empty gt datas
+    # 必要的参数
     batch_size = len(label_lists)
     s = stride
     w = input_size
     h = input_size
-    
     ws = w // s
     hs = h // s
     anchor_number = len(anchor_size)
-
-    # make labels
     gt_tensor = np.zeros([batch_size, hs, ws, anchor_number, 1+1+4+1+4])
+
+    # 制作正样本
     for batch_index in range(batch_size):
         for gt_label in label_lists[batch_index]:
             # get a bbox coords
@@ -203,6 +197,7 @@ def gt_creator(input_size, stride, label_lists, anchor_size):
                             gt_tensor[batch_index, grid_y, grid_x, index, 6] = weight
                             gt_tensor[batch_index, grid_y, grid_x, index, 7:] = np.array([xmin, ymin, xmax, ymax])
                     else:
+                        # 对于那些被忽略的先验框，其gt_obj参数为-1，weight权重也是-1
                         gt_tensor[batch_index, grid_y, grid_x, index, 0] = -1.0
                         gt_tensor[batch_index, grid_y, grid_x, index, 6] = -1.0
 
@@ -227,21 +222,21 @@ def iou_score(bboxes_a, bboxes_b):
 
 
 def loss(pred_conf, pred_cls, pred_txtytwth, pred_iou, label, num_classes):
-    # create loss func
-    conf_loss_function = MSELoss(reduction='mean')
+    # 损失函数
+    conf_loss_function = MSEWithLogitsLoss(reduction='mean')
     cls_loss_function = nn.CrossEntropyLoss(reduction='none')
     txty_loss_function = nn.BCEWithLogitsLoss(reduction='none')
     twth_loss_function = nn.MSELoss(reduction='none')
     iou_loss_function = nn.SmoothL1Loss(reduction='none')
 
-    # pred
+    # 预测
     pred_conf = pred_conf[:, :, 0]
     pred_cls = pred_cls.permute(0, 2, 1)
     pred_txty = pred_txtytwth[:, :, :2]
     pred_twth = pred_txtytwth[:, :, 2:]
     pred_iou = pred_iou[:, :, 0]
 
-    # gt  
+    # 标签  
     gt_conf = label[:, :, 0].float()
     gt_obj = label[:, :, 1].float()
     gt_cls = label[:, :, 2].long()
@@ -252,18 +247,18 @@ def loss(pred_conf, pred_cls, pred_txtytwth, pred_iou, label, num_classes):
     gt_mask = (gt_box_scale_weight > 0.).float()
 
     batch_size = pred_conf.size(0)
-    # objectness loss
+    # 置信度损失
     conf_loss = conf_loss_function(pred_conf, gt_conf, gt_obj)
     
-    # class loss
+    # 类别损失
     cls_loss = torch.sum(cls_loss_function(pred_cls, gt_cls) * gt_mask) / batch_size
     
-    # box loss
+    # 边界框的位置损失
     txty_loss = torch.sum(torch.sum(txty_loss_function(pred_txty, gt_txty), dim=-1) * gt_box_scale_weight * gt_mask) / batch_size
     twth_loss = torch.sum(torch.sum(twth_loss_function(pred_twth, gt_twth), dim=-1) * gt_box_scale_weight * gt_mask) / batch_size
     bbox_loss = txty_loss + twth_loss
 
-    # iou loss
+    # iou 损失
     iou_loss = torch.sum(iou_loss_function(pred_iou, gt_iou) * gt_mask) / batch_size
 
     return conf_loss, cls_loss, bbox_loss, iou_loss
