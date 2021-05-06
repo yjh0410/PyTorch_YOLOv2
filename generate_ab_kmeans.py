@@ -16,41 +16,54 @@ def parse_args():
     return parser.parse_args()
                     
 
+# 边界框的基础类
 class Box():
     def __init__(self, x, y, w, h):
-        self.x = x
-        self.y = y
+        # 边界框的基础参数：中心点(x, y), 宽高(w, h)
+        self.cx = x
+        self.cy = y
         self.w = w
         self.h = h
 
 
+# 计算两个边界框的IoU
 def iou(box1, box2):
-    x1, y1, w1, h1 = box1.x, box1.y, box1.w, box1.h
-    x2, y2, w2, h2 = box2.x, box2.y, box2.w, box2.h
+    cx1, cy1, w1, h1 = box1.cx, box1.cy, box1.w, box1.h
+    cx2, cy2, w2, h2 = box2.cx, box2.cy, box2.w, box2.h
 
-    S_1 = w1 * h1
-    S_2 = w2 * h2
+    # 边界框的面积
+    s1 = w1 * h1
+    s2 = w2 * h2
 
-    xmin_1, ymin_1 = x1 - w1 / 2, y1 - h1 / 2
-    xmax_1, ymax_1 = x1 + w1 / 2, y1 + h1 / 2
-    xmin_2, ymin_2 = x2 - w2 / 2, y2 - h2 / 2
-    xmax_2, ymax_2 = x2 + w2 / 2, y2 + h2 / 2
+    # 计算边界框的左上角点坐标和右下角点坐标
+    xmin_1, ymin_1 = cx1 - w1 / 2, cy1 - h1 / 2
+    xmax_1, ymax_1 = cx1 + w1 / 2, cy1 + h1 / 2
+    xmin_2, ymin_2 = cx2 - w2 / 2, cy2 - h2 / 2
+    xmax_2, ymax_2 = cx2 + w2 / 2, cy2 + h2 / 2
 
-    I_w = min(xmax_1, xmax_2) - max(xmin_1, xmin_2)
-    I_h = min(ymax_1, ymax_2) - max(ymin_1, ymin_2)
-    if I_w < 0 or I_h < 0:
+    # 确定两个边界框的交集面积
+    iw = min(xmax_1, xmax_2) - max(xmin_1, xmin_2)
+    ih = min(ymax_1, ymax_2) - max(ymin_1, ymin_2)
+
+    # 检测是否有交集
+    if iw < 0 or ih < 0:
         return 0
-    I = I_w * I_h
 
-    IoU = I / (S_1 + S_2 - I)
+    # 交集面积
+    si = iw * ih
 
-    return IoU
+    # 并集面积
+    su = s1 + s2 - si
+
+    # 交并比
+    iou = si / su
+
+    return iou
 
 
+# 基于kmeas++方法获取初始的聚类中心点
+# 代码参考：https://blog.csdn.net/hrsstudy/article/details/71173305
 def init_centroids(boxes, n_anchors):
-    """
-        We use kmeans++ to initialize centroids.
-    """
     centroids = []
     boxes_num = len(boxes)
 
@@ -84,13 +97,11 @@ def init_centroids(boxes, n_anchors):
     return centroids
 
 
+# 代码参考：https://blog.csdn.net/hrsstudy/article/details/71173305
 def do_kmeans(n_anchors, boxes, centroids):
     loss = 0
     groups = []
     new_centroids = []
-    # for box in centroids:
-    #     print('box: ', box.x, box.y, box.w, box.h)
-    # exit()
     for i in range(n_anchors):
         groups.append([])
         new_centroids.append(Box(0, 0, 0, 0))
@@ -112,9 +123,10 @@ def do_kmeans(n_anchors, boxes, centroids):
         new_centroids[i].w /= max(len(groups[i]), 1)
         new_centroids[i].h /= max(len(groups[i]), 1)
 
-    return new_centroids, groups, loss# / len(boxes)
+    return new_centroids, groups, loss
 
 
+# 代码参考：https://blog.csdn.net/hrsstudy/article/details/71173305
 def anchor_box_kmeans(total_gt_boxes, n_anchors, loss_convergence, iters, plus=True):
     """
         This function will use k-means to get appropriate anchor boxes for train dataset.
@@ -149,9 +161,11 @@ def anchor_box_kmeans(total_gt_boxes, n_anchors, loss_convergence, iters, plus=T
         for centroid in centroids:
             print(centroid.w, centroid.h)
     
-    print("k-means result : ") 
+    print("k-means 聚类结果 : ") 
     for centroid in centroids:
-        print(round(centroid.w, 2), round(centroid.h, 2), "area: ", round(centroid.w, 2) * round(centroid.h, 2))
+        # 注意，这里我们已经将anchor box的尺寸映射到stride=32的尺度上去了
+        print("w, h: ", round(centroid.w / 32., 2), round(centroid.h / 32., 2), 
+              "area: ", round(centroid.w / 32., 2) * round(centroid.h / 32., 2))
     
     return centroids
 
@@ -166,10 +180,11 @@ if __name__ == "__main__":
     loss_convergence = 1e-6
     iters_n = 1000
 
-    if dataset == 'voc':
+    # 记载数据集
+    if args.dataset == 'voc':
         dataset = VOCDetection(root=VOC_ROOT, transform=BaseTransform([size, size]))
 
-    elif dataset == 'coco':
+    elif args.dataset == 'coco':
         dataset = COCODataset(
                     data_dir=coco_root,
                     img_size=size,
@@ -178,32 +193,33 @@ if __name__ == "__main__":
     boxes = []
     print("The dataset size: ", len(dataset))
     print("Loading the dataset ...")
+
     for i in range(len(dataset)):
         if i % 5000 == 0:
             print('Loading datat [%d / %d]' % (i+1, len(dataset)))
 
-        if dataset== 'coco':
+        if args.dataset == 'coco':
             # For COCO
             img, _ = dataset.pull_image(i)
             w, h = img.shape[1], img.shape[0]
             annotation = dataset.pull_anno(i)
 
-        elif dataset == 'voc':
+        elif args.dataset == 'voc':
             # For VOC
-            img = dataset.pull_image(i)
+            img, _ = dataset.pull_image(i)
             w, h = img.shape[1], img.shape[0]
             _, annotation = dataset.pull_anno(i)
 
-        # prepare bbox datas
+        # 准备边界框数据
         for box_and_label in annotation:
             box = box_and_label[:-1]
             xmin, ymin, xmax, ymax = box
             bw = (xmax - xmin) / w * size
             bh = (ymax - ymin) / h * size
-            # check bbox
+            # 检查边界框
             if bw < 1.0 or bh < 1.0:
                 continue
             boxes.append(Box(0, 0, bw, bh))
 
-    print("Start k-means !")
+    print("开始使用kmeans聚类 anchor box!")
     centroids = anchor_box_kmeans(boxes, n_anchors, loss_convergence, iters_n, plus=True)
