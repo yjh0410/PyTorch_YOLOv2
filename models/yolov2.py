@@ -44,7 +44,7 @@ class YOLOv2(nn.Module):
 
     def create_grid(self, input_size):
         w, h = input_size, input_size
-        # generate grid cells
+        # 生成G矩阵
         ws, hs = w // self.stride, h // self.stride
         grid_y, grid_x = torch.meshgrid([torch.arange(hs), torch.arange(ws)])
         grid_xy = torch.stack([grid_x, grid_y], dim=-1).float()
