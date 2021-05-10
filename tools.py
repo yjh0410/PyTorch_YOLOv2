@@ -35,10 +35,10 @@ class MSEWithLogitsLoss(nn.Module):
     def compute_iou(anchor_boxes, gt_box):
         """计算先验框和真实框之间的IoU
         Input: \n
-            anchor_boxes: [N, 4] \n
+            anchor_boxes: [K, 4] \n
                 gt_box: [1, 4] \n
         Output: \n
-                    iou : [N, 1] \n
+                    iou : [K,] \n
         """
 
         # anchor box :
@@ -51,7 +51,7 @@ class MSEWithLogitsLoss(nn.Module):
         w_ab, h_ab = anchor_boxes[:, 2], anchor_boxes[:, 3]
         
         # gt_box : 
-        # 我们将真实框扩展成[N, 4], 便于计算IoU. 
+        # 我们将真实框扩展成[K, 4], 便于计算IoU. 
         gt_box_expand = np.repeat(gt_box, len(anchor_boxes), axis=0)
 
         gb_x1y1_x2y2 = np.zeros([len(anchor_boxes), 4])
