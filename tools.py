@@ -32,46 +32,46 @@ class MSEWithLogitsLoss(nn.Module):
             return loss
 
 
-    def compute_iou(anchor_boxes, gt_box):
-        """计算先验框和真实框之间的IoU
-        Input: \n
-            anchor_boxes: [K, 4] \n
-                gt_box: [1, 4] \n
-        Output: \n
-                    iou : [K,] \n
-        """
+def compute_iou(anchor_boxes, gt_box):
+    """计算先验框和真实框之间的IoU
+    Input: \n
+        anchor_boxes: [K, 4] \n
+            gt_box: [1, 4] \n
+    Output: \n
+                iou : [K,] \n
+    """
 
-        # anchor box :
-        ab_x1y1_x2y2 = np.zeros([len(anchor_boxes), 4])
-        # 计算先验框的左上角点坐标和右下角点坐标
-        ab_x1y1_x2y2[:, 0] = anchor_boxes[:, 0] - anchor_boxes[:, 2] / 2  # xmin
-        ab_x1y1_x2y2[:, 1] = anchor_boxes[:, 1] - anchor_boxes[:, 3] / 2  # ymin
-        ab_x1y1_x2y2[:, 2] = anchor_boxes[:, 0] + anchor_boxes[:, 2] / 2  # xmax
-        ab_x1y1_x2y2[:, 3] = anchor_boxes[:, 1] + anchor_boxes[:, 3] / 2  # ymax
-        w_ab, h_ab = anchor_boxes[:, 2], anchor_boxes[:, 3]
-        
-        # gt_box : 
-        # 我们将真实框扩展成[K, 4], 便于计算IoU. 
-        gt_box_expand = np.repeat(gt_box, len(anchor_boxes), axis=0)
+    # anchor box :
+    ab_x1y1_x2y2 = np.zeros([len(anchor_boxes), 4])
+    # 计算先验框的左上角点坐标和右下角点坐标
+    ab_x1y1_x2y2[:, 0] = anchor_boxes[:, 0] - anchor_boxes[:, 2] / 2  # xmin
+    ab_x1y1_x2y2[:, 1] = anchor_boxes[:, 1] - anchor_boxes[:, 3] / 2  # ymin
+    ab_x1y1_x2y2[:, 2] = anchor_boxes[:, 0] + anchor_boxes[:, 2] / 2  # xmax
+    ab_x1y1_x2y2[:, 3] = anchor_boxes[:, 1] + anchor_boxes[:, 3] / 2  # ymax
+    w_ab, h_ab = anchor_boxes[:, 2], anchor_boxes[:, 3]
+    
+    # gt_box : 
+    # 我们将真实框扩展成[K, 4], 便于计算IoU. 
+    gt_box_expand = np.repeat(gt_box, len(anchor_boxes), axis=0)
 
-        gb_x1y1_x2y2 = np.zeros([len(anchor_boxes), 4])
-        # 计算真实框的左上角点坐标和右下角点坐标
-        gb_x1y1_x2y2[:, 0] = gt_box_expand[:, 0] - gt_box_expand[:, 2] / 2 # xmin
-        gb_x1y1_x2y2[:, 1] = gt_box_expand[:, 1] - gt_box_expand[:, 3] / 2 # ymin
-        gb_x1y1_x2y2[:, 2] = gt_box_expand[:, 0] + gt_box_expand[:, 2] / 2 # xmax
-        gb_x1y1_x2y2[:, 3] = gt_box_expand[:, 1] + gt_box_expand[:, 3] / 2 # ymin
-        w_gt, h_gt = gt_box_expand[:, 2], gt_box_expand[:, 3]
+    gb_x1y1_x2y2 = np.zeros([len(anchor_boxes), 4])
+    # 计算真实框的左上角点坐标和右下角点坐标
+    gb_x1y1_x2y2[:, 0] = gt_box_expand[:, 0] - gt_box_expand[:, 2] / 2 # xmin
+    gb_x1y1_x2y2[:, 1] = gt_box_expand[:, 1] - gt_box_expand[:, 3] / 2 # ymin
+    gb_x1y1_x2y2[:, 2] = gt_box_expand[:, 0] + gt_box_expand[:, 2] / 2 # xmax
+    gb_x1y1_x2y2[:, 3] = gt_box_expand[:, 1] + gt_box_expand[:, 3] / 2 # ymin
+    w_gt, h_gt = gt_box_expand[:, 2], gt_box_expand[:, 3]
 
-        # 计算IoU
-        S_gt = w_gt * h_gt
-        S_ab = w_ab * h_ab
-        I_w = np.minimum(gb_x1y1_x2y2[:, 2], ab_x1y1_x2y2[:, 2]) - np.maximum(gb_x1y1_x2y2[:, 0], ab_x1y1_x2y2[:, 0])
-        I_h = np.minimum(gb_x1y1_x2y2[:, 3], ab_x1y1_x2y2[:, 3]) - np.maximum(gb_x1y1_x2y2[:, 1], ab_x1y1_x2y2[:, 1])
-        S_I = I_h * I_w
-        U = S_gt + S_ab - S_I + 1e-20
-        IoU = S_I / U
-        
-        return IoU
+    # 计算IoU
+    S_gt = w_gt * h_gt
+    S_ab = w_ab * h_ab
+    I_w = np.minimum(gb_x1y1_x2y2[:, 2], ab_x1y1_x2y2[:, 2]) - np.maximum(gb_x1y1_x2y2[:, 0], ab_x1y1_x2y2[:, 0])
+    I_h = np.minimum(gb_x1y1_x2y2[:, 3], ab_x1y1_x2y2[:, 3]) - np.maximum(gb_x1y1_x2y2[:, 1], ab_x1y1_x2y2[:, 1])
+    S_I = I_h * I_w
+    U = S_gt + S_ab - S_I + 1e-20
+    IoU = S_I / U
+    
+    return IoU
 
 
 def set_anchors(anchor_size):
