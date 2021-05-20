@@ -1,7 +1,7 @@
 # PyTorch_YOLOv2
 
-## Tricks
-Tricks in official paper:
+## 训练所使用的tricks
+
 - [x] batch norm
 - [x] hi-res classifier
 - [x] convolutional
@@ -13,7 +13,25 @@ Tricks in official paper:
 - [x] multi-scale
 - [x] hi-red detector
 
-## Eval
+## 数据集
+
+### VOC2007与VOC2012数据集
+
+读者可以从下面的百度网盘链接来下载VOC2007和VOC2012数据集
+
+链接：https://pan.baidu.com/s/1tYPGCYGyC0wjpC97H-zzMQ 
+
+提取码：4la9
+
+读者会获得 ```VOCdevkit.zip```压缩包, 分别包含 ```VOCdevkit/VOC2007``` 和 ```VOCdevkit/VOC2012```两个文件夹，分别是VOC2007数据集和VOC2012数据集.
+
+### COCO 2017 数据集
+
+运行 ```sh data/scripts/COCO2017.sh```，将会获得 COCO train2017, val2017, test2017三个数据集.
+
+## 实验结果
+
+COCO val 验证集：
 
 <table><tbody>
 <tr><th align="left" bgcolor=#f8f8f8> </th>     <td bgcolor=white> data </td><td bgcolor=white> AP </td><td bgcolor=white> AP50 </td><td bgcolor=white> AP75 </td><td bgcolor=white> AP_S </td><td bgcolor=white> AP_M </td><td bgcolor=white> AP_L </td></tr>
@@ -32,8 +50,8 @@ Tricks in official paper:
 
 # Model
 
-Everyone can download my model files from BaiduYunDisk:
+大家可以从下面的百度网盘链接来下载已训练好的模型：
 
-Link: https://pan.baidu.com/s/1NmdqPwAmirknO5J__lg5Yw 
+链接: https://pan.baidu.com/s/1NmdqPwAmirknO5J__lg5Yw 
 
-Password: hlt6 
+提起码: hlt6 
