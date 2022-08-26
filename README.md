@@ -65,8 +65,6 @@ COCO val 验证集：
 
 # Model
 
-大家可以从下面的百度网盘链接来下载已训练好的模型：
+大家可以点击下面链接来下载已训练好的模型：
 
-链接: https://pan.baidu.com/s/1NmdqPwAmirknO5J__lg5Yw 
-
-提起码: hlt6 
+链接: [github](https://github.com/yjh0410/PyTorch_YOLOv2/releases/download/yolov2_weight/yolov2_29.0_48.8.pth)
