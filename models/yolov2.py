@@ -10,7 +10,16 @@ from .loss import iou_score, compute_loss
 
 
 class YOLOv2(nn.Module):
-    def __init__(self, cfg, device, input_size=416, num_classes=20, trainable=False, conf_thresh=0.001, nms_thresh=0.6, anchor_size=None):
+    def __init__(self,
+                 cfg,
+                 device,
+                 input_size=416,
+                 num_classes=20,
+                 trainable=False,
+                 conf_thresh=0.001, 
+                 nms_thresh=0.6, 
+                 topk=100,
+                 anchor_size=None):
         super(YOLOv2, self).__init__()
         self.device = device
         self.input_size = input_size
@@ -19,6 +28,7 @@ class YOLOv2(nn.Module):
         self.conf_thresh = conf_thresh
         self.nms_thresh = nms_thresh
         self.stride = 32
+        self.topk = topk
 
         # Anchor box config
         self.anchor_size = torch.tensor(anchor_size)  # [KA, 2]
@@ -82,27 +92,7 @@ class YOLOv2(nn.Module):
         self.anchor_boxes = self.create_grid(input_size)
 
 
-    def decode_xywh(self, txtytwth_pred):
-        """将txtytwth预测换算成边界框的中心点坐标和宽高 \n
-            Input: \n
-                txtytwth_pred : [B, H*W*KA, 4] \n
-            Output: \n
-                xywh_pred : [B, H*W*KA, 4] \n
-        """
-        # b_x = sigmoid(tx) + gride_x
-        # b_y = sigmoid(ty) + gride_y
-        xy_pred = torch.sigmoid(txtytwth_pred[..., :2]) + self.anchor_boxes[..., :2]
-        # b_w = anchor_w * exp(tw)
-        # b_h = anchor_h * exp(th)
-        wh_pred = torch.exp(txtytwth_pred[..., 2:]) * self.anchor_boxes[..., 2:]
-
-        # [B, H*W*KA, 4]
-        xywh_pred = torch.cat([xy_pred, wh_pred], -1) * self.stride
-
-        return xywh_pred
-    
-
-    def decode_boxes(self, txtytwth_pred):
+    def decode_boxes(self, anchors, txtytwth_pred):
         """将txtytwth预测换算成边界框的左上角点坐标和右下角点坐标 \n
             Input: \n
                 txtytwth_pred : [B, H*W*KA, 4] \n
@@ -110,7 +100,15 @@ class YOLOv2(nn.Module):
                 x1y1x2y2_pred : [B, H*W*KA, 4] \n
         """
         # 获得边界框的中心点坐标和宽高
-        xywh_pred = self.decode_xywh(txtytwth_pred)
+        # b_x = sigmoid(tx) + gride_x
+        # b_y = sigmoid(ty) + gride_y
+        xy_pred = torch.sigmoid(txtytwth_pred[..., :2]) + anchors[..., :2]
+        # b_w = anchor_w * exp(tw)
+        # b_h = anchor_h * exp(th)
+        wh_pred = torch.exp(txtytwth_pred[..., 2:]) * anchors[..., 2:]
+
+        # [B, H*W*KA, 4]
+        xywh_pred = torch.cat([xy_pred, wh_pred], -1) * self.stride
 
         # 将中心点坐标和宽高换算成边界框的左上角点坐标和右下角点坐标
         x1y1x2y2_pred = torch.zeros_like(xywh_pred)
@@ -154,20 +152,44 @@ class YOLOv2(nn.Module):
         return keep
 
 
-    def postprocess(self, bboxes, scores):
+    def postprocess(self, conf_pred, cls_pred, reg_pred):
         """
-        bboxes: (H*W*KA, 4), bsize = 1
-        scores: (H*W*KA, num_classes), bsize = 1
+        Input:
+            conf_pred: (Tensor) [H*W*KA, 1]
+            cls_pred:  (Tensor) [H*W*KA, C]
+            reg_pred:  (Tensor) [H*W*KA, 4]
         """
+        anchors = self.anchor_boxes
 
-        labels = np.argmax(scores, axis=1)
-        scores = scores[(np.arange(scores.shape[0]), labels)]
+        # (H x W x KA x C,)
+        scores = (torch.sigmoid(conf_pred) * torch.softmax(cls_pred, dim=-1)).flatten()
+
+        # Keep top k top scoring indices only.
+        num_topk = min(self.topk, reg_pred.size(0))
+
+        # torch.sort is actually faster than .topk (at least on GPUs)
+        predicted_prob, topk_idxs = scores.sort(descending=True)
+        topk_scores = predicted_prob[:num_topk]
+        topk_idxs = topk_idxs[:num_topk]
+
+        # filter out the proposals with low confidence score
+        keep_idxs = topk_scores > self.conf_thresh
+        scores = topk_scores[keep_idxs]
+        topk_idxs = topk_idxs[keep_idxs]
+
+        anchor_idxs = torch.div(topk_idxs, self.num_classes, rounding_mode='floor')
+        labels = topk_idxs % self.num_classes
+
+        reg_pred = reg_pred[anchor_idxs]
+        anchors = anchors[anchor_idxs]
+
+        # 解算边界框, 并归一化边界框: [H*W*KA, 4]
+        bboxes = self.decode_boxes(anchors, reg_pred)
         
-        # threshold
-        keep = np.where(scores >= self.conf_thresh)
-        bboxes = bboxes[keep]
-        scores = scores[keep]
-        labels = labels[keep]
+        # to cpu
+        scores = scores.cpu().numpy()
+        labels = labels.cpu().numpy()
+        bboxes = bboxes.cpu().numpy()
 
         # NMS
         keep = np.zeros(len(bboxes), dtype=np.int)
@@ -184,6 +206,10 @@ class YOLOv2(nn.Module):
         bboxes = bboxes[keep]
         scores = scores[keep]
         labels = labels[keep]
+
+        # 归一化边界框
+        bboxes = bboxes / self.input_size
+        bboxes = np.clip(bboxes, 0., 1.)
 
         return bboxes, scores, labels
 
@@ -228,19 +254,8 @@ class YOLOv2(nn.Module):
         cls_pred = cls_pred[0]              #[H*W*KA, NC]
         txtytwth_pred = txtytwth_pred[0]    #[H*W*KA, 4]
 
-        # 每个边界框的得分
-        scores = torch.sigmoid(conf_pred) * torch.softmax(cls_pred, dim=-1)
-
-        # 解算边界框, 并归一化边界框: [H*W*KA, 4]
-        bboxes = self.decode_boxes(txtytwth_pred) / self.input_size
-        bboxes = torch.clamp(bboxes, 0., 1.)
-
-        # 将预测放在cpu处理上，以便进行后处理
-        scores = scores.to('cpu').numpy()
-        bboxes = bboxes.to('cpu').numpy()
-
         # 后处理
-        bboxes, scores, labels = self.postprocess(bboxes, scores)
+        bboxes, scores, labels = self.postprocess(conf_pred, cls_pred, txtytwth_pred)
 
         return bboxes, scores, labels
 
