@@ -33,7 +33,7 @@ parser.add_argument('--nms_thresh', default=0.50, type=float,
 parser.add_argument('--topk', default=100, type=int,
                     help='topk predicted candidates')
                     
-parser.add_argument('-vs', '--visual_threshold', default=0.35, type=float,
+parser.add_argument('-vs', '--visual_threshold', default=0.33, type=float,
                     help='用于可视化的阈值参数')
 parser.add_argument('--cuda', action='store_true', default=False, 
                     help='use cuda.')
