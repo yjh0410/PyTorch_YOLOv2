@@ -193,7 +193,7 @@ def train():
             targets = [label.tolist() for label in targets]
             targets = gt_creator(
                 input_size=train_size, 
-                stride=model.stride, 
+                stride=cfg['stride'], 
                 label_lists=targets, 
                 anchor_size=cfg['anchor_size'][args.dataset],
                 ignore_thresh=cfg['ignore_thresh']
