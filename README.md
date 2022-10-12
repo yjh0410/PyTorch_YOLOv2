@@ -79,7 +79,7 @@ VOC2007 test 测试集
 | YOLOv2            |  320×320     |   64.6  |    -   |
 | YOLOv2            |  416×416     |   77.1  |    -   |
 | YOLOv2            |  512×512     |   78.0  |    -   |
-| YOLOv2            |  608×608     |   73.3  | [github](https://github.com/yjh0410/PyTorch_YOLOv2/releases/download/yolov2_weight/yolov2_voc.pth) |
+| YOLOv2            |  608×608     |   78.3  | [github](https://github.com/yjh0410/PyTorch_YOLOv2/releases/download/yolov2_weight/yolov2_voc.pth) |
 
 
 COCO val 验证集
