@@ -4,34 +4,50 @@ import os
 import random
 import argparse
 import time
-import math
-import numpy as np
 
 import torch
+import torch.nn.functional as F
 import torch.optim as optim
-import torch.backends.cudnn as cudnn
+from copy import deepcopy
 
-from data import *
-import tools
+from data.coco import COCODataset
+from data.voc0712 import VOCDetection
+from data.transform import Augmentation, BaseTransform
 
-from utils.augmentations import SSDAugmentation
-from utils.cocoapi_evaluator import COCOAPIEvaluator
-from utils.vocapi_evaluator import VOCAPIEvaluator
+from utils.misc import detection_collate
+from utils.com_paras_flops import FLOPs_and_Params
+from evaluator.cocoapi_evaluator import COCOAPIEvaluator
+from evaluator.vocapi_evaluator import VOCAPIEvaluator
+
+from config import build_model_config
+from models.build import build_yolov2
+from models.matcher import gt_creator
 
 def parse_args():
     parser = argparse.ArgumentParser(description='YOLOv2 Detection')
+    # 基本参数
+    parser.add_argument('--cuda', action='store_true', default=False,
+                        help='use cuda.')
+    parser.add_argument('--tfboard', action='store_true', default=False,
+                        help='use tensorboard')
+    parser.add_argument('--eval_epoch', type=int,
+                            default=10, help='interval between evaluations')
+    parser.add_argument('--save_folder', default='weights/', type=str, 
+                        help='Gamma update for SGD')
+    parser.add_argument('--num_workers', default=8, type=int, 
+                        help='Number of workers used in dataloading')
+
+    # 模型参数
     parser.add_argument('-v', '--version', default='yolov2',
-                        help='yolov2')
-    parser.add_argument('-d', '--dataset', default='voc',
-                        help='voc or coco')
-    parser.add_argument('-ms', '--multi_scale', action='store_true', default=False,
-                        help='use multi-scale trick')
+                        help='build yolo')
+    parser.add_argument('--conf_thresh', default=0.001, type=float,
+                        help='Confidence threshold')
+    parser.add_argument('--nms_thresh', default=0.50, type=float,
+                        help='NMS threshold')
+
+    # 训练配置
     parser.add_argument('--batch_size', default=32, type=int, 
                         help='Batch size for training')
-    parser.add_argument('--lr', default=1e-3, type=float, 
-                        help='initial learning rate')
-    parser.add_argument('-cos', '--cos', action='store_true', default=False,
-                        help='use cos lr')
     parser.add_argument('-no_wp', '--no_warm_up', action='store_true', default=False,
                         help='yes or no to choose using warmup strategy to train')
     parser.add_argument('--wp_epoch', type=int, default=1,
@@ -40,24 +56,28 @@ def parse_args():
                         help='start epoch to train')
     parser.add_argument('-r', '--resume', default=None, type=str, 
                         help='keep training')
+    parser.add_argument('-ms', '--multi_scale', action='store_true', default=False,
+                        help='use multi-scale trick')                  
+    parser.add_argument('--max_epoch', type=int, default=200,
+                        help='The upper bound of warm-up')
+    parser.add_argument('--lr_epoch', nargs='+', default=[100, 150], type=int,
+                        help='lr epoch to decay')
+
+    # 优化器参数
+    parser.add_argument('--lr', default=1e-3, type=float, 
+                        help='initial learning rate')
     parser.add_argument('--momentum', default=0.9, type=float, 
                         help='Momentum value for optim')
     parser.add_argument('--weight_decay', default=5e-4, type=float, 
                         help='Weight decay for SGD')
     parser.add_argument('--gamma', default=0.1, type=float, 
                         help='Gamma update for SGD')
-    parser.add_argument('--num_workers', default=8, type=int, 
-                        help='Number of workers used in dataloading')
-    parser.add_argument('--eval_epoch', type=int,
-                            default=10, help='interval between evaluations')
-    parser.add_argument('--cuda', action='store_true', default=False,
-                        help='use cuda.')
-    parser.add_argument('--tfboard', action='store_true', default=False,
-                        help='use tensorboard')
-    parser.add_argument('--debug', action='store_true', default=False,
-                        help='debug mode where only one image is trained')
-    parser.add_argument('--save_folder', default='weights/', type=str, 
-                        help='Gamma update for SGD')
+
+    # 数据集参数
+    parser.add_argument('-d', '--dataset', default='voc',
+                        help='voc or coco')
+    parser.add_argument('--root', default='/mnt/share/ssd2/dataset',
+                        help='data root')
 
     return parser.parse_args()
 
@@ -73,7 +93,6 @@ def train():
     # 是否使用cuda
     if args.cuda:
         print('use cuda')
-        cudnn.benchmark = True
         device = torch.device("cuda")
     else:
         device = torch.device("cpu")
@@ -87,73 +106,27 @@ def train():
         train_size = 416
         val_size = 416
 
-    cfg = train_cfg
+    # 构建yolov2的配置文件
+    cfg = build_model_config(args)
+
     # 构建dataset类和dataloader类
-    if args.dataset == 'voc':
-        # 加载voc数据集
-        data_dir = VOC_ROOT
-        num_classes = 20
-        dataset = VOCDetection(root=data_dir, 
-                                transform=SSDAugmentation(train_size)
-                                )
-
-        evaluator = VOCAPIEvaluator(data_root=data_dir,
-                                    img_size=val_size,
-                                    device=device,
-                                    transform=BaseTransform(val_size),
-                                    labelmap=VOC_CLASSES
-                                    )
-
-    elif args.dataset == 'coco':
-        # 加载coco数据集
-        data_dir = coco_root
-        num_classes = 80
-        dataset = COCODataset(
-                    data_dir=data_dir,
-                    img_size=train_size,
-                    transform=SSDAugmentation(train_size),
-                    debug=args.debug)
-
-
-        evaluator = COCOAPIEvaluator(
-                        data_dir=data_dir,
-                        img_size=val_size,
-                        device=device,
-                        transform=BaseTransform(val_size)
-                        )
+    dataset, num_classes, evaluator = build_dataset(args, device, train_size, val_size)
     
-    else:
-        print('unknow dataset !! Only support voc and coco !!')
-        exit(0)
-    
-    print('Training model on:', dataset.name)
-    print('The dataset size:', len(dataset))
-    print("----------------------------------------------------------")
-
-    # dataloader类
-    dataloader = torch.utils.data.DataLoader(
-                    dataset, 
-                    batch_size=args.batch_size, 
-                    shuffle=True, 
-                    collate_fn=detection_collate,
-                    num_workers=args.num_workers,
-                    pin_memory=True
-                    )
+    # 构建dataloader类
+    dataloader = build_dataloader(args, dataset)
 
     # 构建我们的模型
-    if args.version == 'yolov2':
-        from models.yolov2 import YOLOv2
-        anchor_size = ANCHOR_SIZE if args.dataset == 'voc' else ANCHOR_SIZE_COCO
-    
-        yolo_net = YOLOv2(device, input_size=train_size, num_classes=num_classes, trainable=True, anchor_size=anchor_size)
-        print('Let us train yolov2 on the %s dataset ......' % (args.dataset))
-
-    else:
-        print('Unknown version !!!')
-        exit()
-
-    model = yolo_net
+    model = build_yolov2(args, cfg, device, train_size, num_classes, trainable=True)
     model.to(device).train()
+
+    # compute FLOPs and Params
+    model_copy = deepcopy(model)
+    model_copy.trainable = False
+    model_copy.eval()
+    FLOPs_and_Params(model=model_copy, 
+                        img_size=val_size, 
+                        device=device)
+    del model_copy
 
     # 使用 tensorboard 可视化训练过程
     if args.tfboard:
@@ -179,15 +152,17 @@ def train():
                             weight_decay=args.weight_decay
                             )
 
-    max_epoch = cfg['max_epoch']                  # 最大训练轮次
-    epoch_size = len(dataset) // args.batch_size  # 每一训练轮次的迭代次数
+    max_epoch = args.max_epoch    # 最大训练轮次
+    lr_epoch = args.lr_epoch
+    epoch_size = len(dataloader)  # 每一训练轮次的迭代次数
 
     # 开始训练
+    best_map = -1.
     t0 = time.time()
     for epoch in range(args.start_epoch, max_epoch):
 
         # 使用阶梯学习率衰减策略
-        if epoch in cfg['lr_epoch']:
+        if epoch in lr_epoch:
             tmp_lr = tmp_lr * 0.1
             set_lr(optimizer, tmp_lr)
 
@@ -202,7 +177,6 @@ def train():
                 elif epoch == args.wp_epoch and iter_i == 0:
                     tmp_lr = base_lr
                     set_lr(optimizer, tmp_lr)
-        
 
             # 多尺度训练
             if iter_i % 10 == 0 and iter_i > 0 and args.multi_scale:
@@ -215,20 +189,21 @@ def train():
             
             # 制作训练标签
             targets = [label.tolist() for label in targets]
-            targets = tools.gt_creator(input_size=train_size, 
-                                        stride=yolo_net.stride, 
-                                        label_lists=targets, 
-                                        anchor_size=anchor_size
-                                        )
+            targets = gt_creator(
+                input_size=train_size, 
+                stride=model.stride, 
+                label_lists=targets, 
+                anchor_size=cfg['anchor_size'][args.dataset],
+                ignore_thresh=cfg['ignore_thresh']
+                )
+
             # to device
             images = images.to(device)
             targets = torch.tensor(targets).float().to(device)
 
             # 前向推理和计算损失
-            conf_loss, cls_loss, bbox_loss, iou_loss = model(images, target=targets)
-            
-            total_loss = conf_loss + cls_loss + bbox_loss # + iou_loss
-            
+            conf_loss, cls_loss, bbox_loss, total_loss = model(images, targets=targets)
+                        
             # 反向传播
             total_loss.backward()        
             optimizer.step()
@@ -240,16 +215,14 @@ def train():
                     writer.add_scalar('obj loss', conf_loss.item(), iter_i + epoch * epoch_size)
                     writer.add_scalar('cls loss', cls_loss.item(), iter_i + epoch * epoch_size)
                     writer.add_scalar('box loss', bbox_loss.item(), iter_i + epoch * epoch_size)
-                    writer.add_scalar('iou loss', iou_loss.item(), iter_i + epoch * epoch_size)
                 
                 t1 = time.time()
                 print('[Epoch %d/%d][Iter %d/%d][lr %.6f]'
-                    '[Loss: obj %.2f || cls %.2f || bbox %.2f || iou %.2f || total %.2f || size %d || time: %.2f]'
+                    '[Loss: obj %.2f || cls %.2f || bbox %.2f || total %.2f || size %d || time: %.2f]'
                         % (epoch+1, max_epoch, iter_i, epoch_size, tmp_lr,
                             conf_loss.item(), 
                             cls_loss.item(), 
                             bbox_loss.item(), 
-                            iou_loss.item(),
                             total_loss.item(), 
                             train_size, t1-t0),
                         flush=True)
@@ -257,7 +230,7 @@ def train():
                 t0 = time.time()
 
         # evaluation
-        if (epoch + 1) % args.eval_epoch == 0:
+        if epoch  % args.eval_epoch == 0 or (epoch + 1) == max_epoch:
             model.trainable = False
             model.set_grid(val_size)
             model.eval()
@@ -270,17 +243,85 @@ def train():
             model.set_grid(train_size)
             model.train()
 
-        # save model
-        if (epoch + 1) % 10 == 0:
-            print('Saving state, epoch:', epoch + 1)
-            torch.save(model.state_dict(), os.path.join(path_to_save, 
-                        args.version + '_' + repr(epoch + 1) + '.pth')
-                        )  
+            cur_map = evaluator.map
+            if cur_map > best_map:
+                # update best-map
+                best_map = cur_map
+                # save model
+                print('Saving state, epoch:', epoch + 1)
+                weight_name = '{}_epoch_{}_{:.1f}.pth'.format(args.version, epoch + 1, best_map*100)
+                checkpoint_path = os.path.join(path_to_save, weight_name)
+                torch.save(model.state_dict(), checkpoint_path)                      
 
 
 def set_lr(optimizer, lr):
     for param_group in optimizer.param_groups:
         param_group['lr'] = lr
+
+
+def build_dataset(args, device, train_size, val_size):
+    pixel_mean = (0.406, 0.456, 0.485)  # BGR
+    pixel_std = (0.225, 0.224, 0.229)   # BGR
+    train_transform = Augmentation(train_size, pixel_mean, pixel_std)
+    val_transform = BaseTransform(val_size, pixel_mean, pixel_std)
+    
+    # 构建dataset类和dataloader类
+    if args.dataset == 'voc':
+        data_root = os.path.join(args.root, 'VOCdevkit')
+        # 加载voc数据集
+        num_classes = 20
+        dataset = VOCDetection(
+            root=data_root,
+            transform=train_transform
+            )
+
+        evaluator = VOCAPIEvaluator(
+            data_root=data_root,
+            img_size=val_size,
+            device=device,
+            transform=val_transform
+            )
+
+    elif args.dataset == 'coco':
+        # 加载COCO数据集
+        data_root = os.path.join(args.root, 'COCO')
+        num_classes = 80
+        dataset = COCODataset(
+            data_dir=data_root,
+            img_size=train_size,
+            transform=train_transform
+            )
+
+        evaluator = COCOAPIEvaluator(
+            data_dir=data_root,
+            img_size=val_size,
+            device=device,
+            transform=val_transform
+            )
+    
+    else:
+        print('unknow dataset !! Only support voc and coco !!')
+        exit(0)
+
+    print('Training model on:', args.dataset)
+    print('The dataset size:', len(dataset))
+    print("----------------------------------------------------------")
+
+
+    return dataset, num_classes, evaluator
+
+
+def build_dataloader(args, dataset):
+    dataloader = torch.utils.data.DataLoader(
+                    dataset, 
+                    batch_size=args.batch_size, 
+                    shuffle=True, 
+                    collate_fn=detection_collate,
+                    num_workers=args.num_workers,
+                    pin_memory=True
+                    )
+    
+    return dataloader
 
 
 if __name__ == '__main__':

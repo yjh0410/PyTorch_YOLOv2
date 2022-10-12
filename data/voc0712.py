@@ -6,15 +6,12 @@ https://github.com/fmassa/vision/blob/voc_dataset/torchvision/datasets/voc.py
 Updated by: Ellis Brown, Max deGroot
 """
 import os.path as osp
-import sys
 import torch
 import torch.utils.data as data
 import cv2
 import numpy as np
-if sys.version_info[0] == 2:
-    import xml.etree.cElementTree as ET
-else:
-    import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET
+
 
 VOC_CLASSES = (  # always index 0
     'aeroplane', 'bicycle', 'bird', 'boat',
@@ -22,12 +19,6 @@ VOC_CLASSES = (  # always index 0
     'cow', 'diningtable', 'dog', 'horse',
     'motorbike', 'person', 'pottedplant',
     'sheep', 'sofa', 'train', 'tvmonitor')
-
-# note: if you used our download scripts, this should be right
-path_to_dir = osp.dirname(osp.abspath(__file__))
-VOC_ROOT = path_to_dir + "/VOCdevkit/"
-
-VOC_ROOT = "/home/k545/object-detection/dataset/VOCdevkit/"
 
 
 class VOCAnnotationTransform(object):
@@ -96,11 +87,16 @@ class VOCDetection(data.Dataset):
             (default: 'VOC2007')
     """
 
-    def __init__(self, root,
+    def __init__(self, 
+                 root,
+                 img_size=None,
                  image_sets=[('2007', 'trainval'), ('2012', 'trainval')],
-                 transform=None, target_transform=VOCAnnotationTransform(),
-                 dataset_name='VOC0712'):
+                 transform=None, 
+                 target_transform=VOCAnnotationTransform(),
+                 dataset_name='VOC0712'
+                 ):
         self.root = root
+        self.img_size = img_size
         self.image_set = image_sets
         self.transform = transform
         self.target_transform = target_transform
@@ -134,9 +130,14 @@ class VOCDetection(data.Dataset):
         if self.target_transform is not None:
             target = self.target_transform(target, width, height)
 
+        # basic augmentation(SSDAugmentation or BaseTransform)
         if self.transform is not None:
+            # check labels
+            if len(target) == 0:
+                target = np.zeros([1, 5])
+            else:
+                target = np.array(target)
 
-            target = np.array(target)
             img, boxes, labels = self.transform(img, target[:, :4], target[:, 4])
             # to rgb
             img = img[:, :, (2, 1, 0)]
@@ -177,3 +178,45 @@ class VOCDetection(data.Dataset):
         anno = ET.parse(self._annopath % img_id).getroot()
         gt = self.target_transform(anno, 1, 1)
         return img_id[1], gt
+
+
+if __name__ == "__main__":
+    from transform import Augmentation, BaseTransform
+
+    img_size = 640
+    pixel_mean = (0.406, 0.456, 0.485)  # BGR
+    pixel_std = (0.225, 0.224, 0.229)   # BGR
+    data_root = 'D:\\python_work\\object-detection\\dataset\\VOCdevkit'
+    transform = Augmentation(img_size, pixel_mean, pixel_std)
+    transform = BaseTransform(img_size, pixel_mean, pixel_std)
+
+    # dataset
+    dataset = VOCDetection(
+        root=data_root,
+        img_size=img_size, 
+        image_sets=[('2007', 'trainval')],
+        transform=transform
+        )
+
+    for i in range(1000):
+        im, gt, h, w = dataset.pull_item(i)
+
+        # to numpy
+        image = im.permute(1, 2, 0).numpy()
+        # to BGR
+        image = image[..., (2, 1, 0)]
+        # denormalize
+        image = (image * pixel_std + pixel_mean) * 255
+        # to 
+        image = image.astype(np.uint8).copy()
+
+        # draw bbox
+        for box in gt:
+            xmin, ymin, xmax, ymax, _ = box
+            xmin *= img_size
+            ymin *= img_size
+            xmax *= img_size
+            ymax *= img_size
+            image = cv2.rectangle(image, (int(xmin), int(ymin)), (int(xmax), int(ymax)), (0,0,255), 2)
+        cv2.imshow('gt', image)
+        cv2.waitKey(0)

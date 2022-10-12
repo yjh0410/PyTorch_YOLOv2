@@ -1,5 +1,3 @@
-import torch
-from torchvision import transforms
 import cv2
 import numpy as np
 import types
@@ -53,17 +51,6 @@ class Compose(object):
         return img, boxes, labels
 
 
-class Lambda(object):
-    """Applies a lambda as a transform."""
-
-    def __init__(self, lambd):
-        assert isinstance(lambd, types.LambdaType)
-        self.lambd = lambd
-
-    def __call__(self, img, boxes=None, labels=None):
-        return self.lambd(img, boxes, labels)
-
-
 class ConvertFromInts(object):
     def __call__(self, image, boxes=None, labels=None):
         return image.astype(np.float32), boxes, labels
@@ -105,8 +92,23 @@ class ToPercentCoords(object):
         return image, boxes, labels
 
 
+class ConvertColor(object):
+    def __init__(self, current='BGR', transform='HSV'):
+        self.transform = transform
+        self.current = current
+
+    def __call__(self, image, boxes=None, labels=None):
+        if self.current == 'BGR' and self.transform == 'HSV':
+            image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
+        elif self.current == 'HSV' and self.transform == 'BGR':
+            image = cv2.cvtColor(image, cv2.COLOR_HSV2BGR)
+        else:
+            raise NotImplementedError
+        return image, boxes, labels
+
+
 class Resize(object):
-    def __init__(self, size=416):
+    def __init__(self, size=640):
         self.size = size
 
     def __call__(self, image, boxes=None, labels=None):
@@ -155,21 +157,6 @@ class RandomLightingNoise(object):
         return image, boxes, labels
 
 
-class ConvertColor(object):
-    def __init__(self, current='BGR', transform='HSV'):
-        self.transform = transform
-        self.current = current
-
-    def __call__(self, image, boxes=None, labels=None):
-        if self.current == 'BGR' and self.transform == 'HSV':
-            image = cv2.cvtColor(image, cv2.COLOR_BGR2HSV)
-        elif self.current == 'HSV' and self.transform == 'BGR':
-            image = cv2.cvtColor(image, cv2.COLOR_HSV2BGR)
-        else:
-            raise NotImplementedError
-        return image, boxes, labels
-
-
 class RandomContrast(object):
     def __init__(self, lower=0.5, upper=1.5):
         self.lower = lower
@@ -196,16 +183,6 @@ class RandomBrightness(object):
             delta = random.uniform(-self.delta, self.delta)
             image += delta
         return image, boxes, labels
-
-
-class ToCV2Image(object):
-    def __call__(self, tensor, boxes=None, labels=None):
-        return tensor.cpu().numpy().astype(np.float32).transpose((1, 2, 0)), boxes, labels
-
-
-class ToTensor(object):
-    def __call__(self, cvimage, boxes=None, labels=None):
-        return torch.from_numpy(cvimage.astype(np.float32)).permute(2, 0, 1), boxes, labels
 
 
 class RandomSampleCrop(object):
@@ -238,7 +215,8 @@ class RandomSampleCrop(object):
         height, width, _ = image.shape
         while True:
             # randomly choose a mode
-            mode = random.choice(self.sample_options)
+            sample_id = np.random.randint(len(self.sample_options))
+            mode = self.sample_options[sample_id]
             if mode is None:
                 return image, boxes, labels
 
@@ -387,7 +365,6 @@ class PhotometricDistort(object):
             RandomContrast()
         ]
         self.rand_brightness = RandomBrightness()
-        # self.rand_light_noise = RandomLightingNoise()
 
     def __call__(self, image, boxes, labels):
         im = image.copy()
@@ -398,25 +375,41 @@ class PhotometricDistort(object):
             distort = Compose(self.pd[1:])
         im, boxes, labels = distort(im, boxes, labels)
         return im, boxes, labels
-        # return self.rand_light_noise(im, boxes, labels)
 
 
-class SSDAugmentation(object):
-    def __init__(self, size=416, mean=(0.406, 0.456, 0.485), std=(0.225, 0.224, 0.229)):
+class Augmentation(object):
+    def __init__(self, size=640, mean=(0.406, 0.456, 0.485), std=(0.225, 0.224, 0.229)):
         self.mean = mean
         self.size = size
         self.std = std
         self.augment = Compose([
-            ConvertFromInts(),
-            ToAbsoluteCoords(),
-            PhotometricDistort(),
-            Expand(self.mean),
-            RandomSampleCrop(),
-            RandomMirror(),
-            ToPercentCoords(),
-            Resize(self.size),
-            Normalize(self.mean, self.std)
+            ConvertFromInts(),             # 将int类型转换为float32类型
+            ToAbsoluteCoords(),            # 将归一化的相对坐标转换为绝对坐标
+            PhotometricDistort(),          # 图像颜色增强
+            Expand(self.mean),             # 扩充增强
+            RandomSampleCrop(),            # 随机剪裁
+            RandomMirror(),                # 随机水平镜像
+            ToPercentCoords(),             # 将绝对坐标转换为归一化的相对坐标
+            Resize(self.size),             # resize操作
+            Normalize(self.mean, self.std) # 图像颜色归一化
         ])
 
     def __call__(self, img, boxes, labels):
         return self.augment(img, boxes, labels)
+
+
+class BaseTransform:
+    def __init__(self, size, mean=(0.406, 0.456, 0.485), std=(0.225, 0.224, 0.229)):
+        self.size = size
+        self.mean = np.array(mean, dtype=np.float32)
+        self.std = np.array(std, dtype=np.float32)
+
+    def __call__(self, image, boxes=None, labels=None):
+        # resize
+        image = cv2.resize(image, (self.size, self.size)).astype(np.float32)
+        # normalize
+        image /= 255.
+        image -= self.mean
+        image /= self.std
+
+        return image, boxes, labels

@@ -1,11 +1,10 @@
 import json
 import tempfile
-
+import torch
+import numpy as np
 from pycocotools.cocoeval import COCOeval
-from torch.autograd import Variable
 
-from data.cocodataset import *
-from data import *
+from data.coco import COCODataset
 
 
 class COCOAPIEvaluator():
@@ -26,29 +25,26 @@ class COCOAPIEvaluator():
             nmsthre (float):
                 IoU threshold of non-max supression ranging from 0 to 1.
         """
-        self.testset = testset
-        if self.testset:
-            json_file='image_info_test-dev2017.json'
-            name = 'test2017'
-        else:
-            json_file='instances_val2017.json'
-            name='val2017'
-
-        self.dataset = COCODataset(
-                                   data_dir=data_dir,
-                                   img_size=img_size,
-                                   json_file=json_file,
-                                   transform=None,
-                                   name=name)
-        self.dataloader = torch.utils.data.DataLoader(
-                                    self.dataset, 
-                                    batch_size=1, 
-                                    shuffle=False, 
-                                    collate_fn=detection_collate,
-                                    num_workers=0)
         self.img_size = img_size
         self.transform = transform
         self.device = device
+        self.map = -1.
+
+        self.testset = testset
+        if self.testset:
+            json_file='image_info_test-dev2017.json'
+            image_set = 'test2017'
+        else:
+            json_file='instances_val2017.json'
+            image_set='val2017'
+
+        self.dataset = COCODataset(
+            data_dir=data_dir,
+            img_size=img_size,
+            json_file=json_file,
+            transform=None,
+            image_set=image_set)
+
 
     def evaluate(self, model):
         """
@@ -82,14 +78,14 @@ class COCOAPIEvaluator():
             ids.append(id_)
             with torch.no_grad():
                 outputs = model(x)
-                bboxes, scores, cls_inds = outputs
+                bboxes, scores, labels = outputs
                 bboxes *= scale
             for i, box in enumerate(bboxes):
                 x1 = float(box[0])
                 y1 = float(box[1])
                 x2 = float(box[2])
                 y2 = float(box[3])
-                label = self.dataset.class_ids[int(cls_inds[i])]
+                label = self.dataset.class_ids[int(labels[i])]
                 
                 bbox = [x1, y1, x2 - x1, y2 - y1]
                 score = float(scores[i]) # object score * class score
@@ -105,8 +101,8 @@ class COCOAPIEvaluator():
             cocoGt = self.dataset.coco
             # workaround: temporarily write data to json file because pycocotools can't process dict in py36.
             if self.testset:
-                json.dump(data_dict, open('yolov2_2017.json', 'w'))
-                cocoDt = cocoGt.loadRes('yolov2_2017.json')
+                json.dump(data_dict, open('yolo_2017.json', 'w'))
+                cocoDt = cocoGt.loadRes('yolo_2017.json')
             else:
                 _, tmp = tempfile.mkstemp()
                 json.dump(data_dict, open(tmp, 'w'))
@@ -117,11 +113,14 @@ class COCOAPIEvaluator():
             cocoEval.accumulate()
             cocoEval.summarize()
 
-            ap50, ap50_95 = cocoEval.stats[0], cocoEval.stats[1]
+            ap50_95, ap50 = cocoEval.stats[0], cocoEval.stats[1]
             print('ap50_95 : ', ap50_95)
             print('ap50 : ', ap50)
+            self.map = ap50_95
+            self.ap50_95 = ap50_95
+            self.ap50 = ap50
 
-            return ap50, ap50_95
+            return ap50_95, ap50
         else:
             return 0, 0
 

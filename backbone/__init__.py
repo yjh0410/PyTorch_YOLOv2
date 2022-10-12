@@ -1,1 +1,8 @@
-from .resnet import resnet18, resnet34, resnet50, resnet101, resnet152
+from .darknet19 import build_darknet19
+
+
+def build_backbone(model_name='darknet19', pretrained=False):
+    if model_name == 'darknet19':
+        backbone, feat_dims = build_darknet19(pretrained)
+
+    return backbone, feat_dims
