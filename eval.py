@@ -19,6 +19,8 @@ parser.add_argument('--root', default='/mnt/share/ssd2/dataset',
 
 parser.add_argument('-v', '--version', default='yolov2',
                     help='yolo.')
+parser.add_argument('--coco_test', action='store_true', default=False,
+                    help='evaluate model on coco-test')
 parser.add_argument('--conf_thresh', default=0.001, type=float,
                     help='得分阈值')
 parser.add_argument('--nms_thresh', default=0.50, type=float,
@@ -81,14 +83,11 @@ if __name__ == '__main__':
     if args.dataset == 'voc':
         print('eval on voc ...')
         num_classes = 20
-    elif args.dataset == 'coco-val':
+    elif args.dataset == 'coco':
         print('eval on coco-val ...')
         num_classes = 80
-    elif args.dataset == 'coco-test':
-        print('eval on coco-test-dev ...')
-        num_classes = 80
     else:
-        print('unknow dataset !! we only support voc, coco-val, coco-test !!!')
+        print('unknow dataset !! we only support voc, coco !!!')
         exit(0)
 
     # cuda
@@ -114,7 +113,8 @@ if __name__ == '__main__':
     with torch.no_grad():
         if args.dataset == 'voc':
             voc_test(model, device, args.input_size, val_transform)
-        elif args.dataset == 'coco-val':
-            coco_test(model, device, args.input_size, val_transform, test=False)
-        elif args.dataset == 'coco-test':
-            coco_test(model, device, args.input_size, val_transform, test=True)
+        elif args.dataset == 'coco':
+            if args.coco_test:
+                coco_test(model, device, args.input_size, val_transform, test=True)
+            else:
+                coco_test(model, device, args.input_size, val_transform, test=False)

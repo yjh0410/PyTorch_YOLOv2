@@ -135,7 +135,7 @@ if __name__ == '__main__':
             transform=None
             )
 
-    elif args.dataset == 'coco-val':
+    elif args.dataset == 'coco':
         data_root = os.path.join(args.root, 'COCO')
         # 加载COCO val数据集
         print('test on coco-val ...')

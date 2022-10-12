@@ -76,7 +76,7 @@ VOC2007 test 测试集
 
 | Model             |  Input size  |   mAP   | Weight |
 |-------------------|--------------|---------|--------|
-| YOLOv2            |  320×320     |   64.6  |    -   |
+| YOLOv2            |  320×320     |   73.4  |    -   |
 | YOLOv2            |  416×416     |   77.1  |    -   |
 | YOLOv2            |  512×512     |   78.0  |    -   |
 | YOLOv2            |  608×608     |   78.3  | [github](https://github.com/yjh0410/PyTorch_YOLOv2/releases/download/yolov2_weight/yolov2_voc.pth) |
@@ -86,33 +86,43 @@ COCO val 验证集
 
 | Model             |  Input size    |   AP    |   AP50    | Weight|
 |-------------------|----------------|---------|-----------|-------|
-| YOLOv2            |  320×320       |   13.7  |   29.6    |   -   |
-| YOLOv2            |  416×416       |   16.4  |   34.7    |   -   |
-| YOLOv2            |  512×512       |   18.1  |   37.9    |   -   |
-| YOLOv2            |  608×608       |   18.6  |   39.0    | [github]() |
+| YOLOv2            |  320×320       |     |       |   -   |
+| YOLOv2            |  416×416       |     |       |   -   |
+| YOLOv2            |  512×512       |     |       |   -   |
+| YOLOv2            |  608×608       |     |       | [github]() |
+
+大家可以点击表格中的[github]()来下载模型权重文件。
+
+# 训练模型
+运行下方的命令可开始在```VOC```数据集上进行训练：
+```Shell
+python train.py \
+        --cuda \
+        -d voc \
+        -ms \
+        --batch_size 32 \
+        --lr 0.001 \
+        --max_epoch 200 \
+        --lr_epoch 100 150 \
+```
+
+# 测试模型
+运行下方的命令可开始在```VOC```数据集上进行训练：
+```Shell
+python test.py \
+        --cuda \
+        -d voc \
+        -size 416 \
+        --weight path/to/weight \
+```
 
 
-
-
-COCO val 验证集：
-
-<table><tbody>
-<tr><th align="left" bgcolor=#f8f8f8> </th>     <td bgcolor=white> data </td><td bgcolor=white> AP </td><td bgcolor=white> AP50 </td><td bgcolor=white> AP75 </td><td bgcolor=white> AP_S </td><td bgcolor=white> AP_M </td><td bgcolor=white> AP_L </td></tr>
-
-<tr><th align="left" bgcolor=#f8f8f8> Our YOLOv2-320</th><td bgcolor=white> COCO eval </td><td bgcolor=white> 25.8 </td><td bgcolor=white> 44.6 </td><td bgcolor=white> 25.9 </td><td bgcolor=white> 4.6 </td><td bgcolor=white> 26.8 </td><td bgcolor=white> 47.9 </td></tr>
-
-<tr><th align="left" bgcolor=#f8f8f8> Our YOLOv2-416</th><td bgcolor=white> COCO eval </td><td bgcolor=white> 29.0 </td><td bgcolor=white> 48.8 </td><td bgcolor=white> 29.7 </td><td bgcolor=white> 7.4 </td><td bgcolor=white> 31.9 </td><td bgcolor=white> 48.3 </td></tr>
-
-<tr><th align="left" bgcolor=#f8f8f8> Our YOLOv2-512</th><td bgcolor=white> COCO eval </td><td bgcolor=white> 30.4 </td><td bgcolor=white> 51.6 </td><td bgcolor=white> 30.9 </td><td bgcolor=white> 10.1 </td><td bgcolor=white> 34.9 </td><td bgcolor=white> 46.6 </td></tr>
-
-<tr><th align="left" bgcolor=#f8f8f8> Our YOLOv2-544</th><td bgcolor=white> COCO eval </td><td bgcolor=white> 30.4 </td><td bgcolor=white> 51.9 </td><td bgcolor=white> 30.9 </td><td bgcolor=white> 11.1 </td><td bgcolor=white> 35.8 </td><td bgcolor=white> 45.5 </td></tr>
-
-<tr><th align="left" bgcolor=#f8f8f8> Our YOLOv2-608</th><td bgcolor=white> COCO eval </td><td bgcolor=white> 29.2 </td><td bgcolor=white> 51.6 </td><td bgcolor=white> 29.1 </td><td bgcolor=white> 13.6 </td><td bgcolor=white> 36.8 </td><td bgcolor=white> 40.5 </td></tr>
-</table></tbody>
-
-
-# Model
-
-大家可以点击下面链接来下载已训练好的模型：
-
-链接: [github](https://github.com/yjh0410/PyTorch_YOLOv2/releases/download/yolov2_weight/yolov2_29.0_48.8.pth)
+# 验证模型
+运行下方的命令可开始在```VOC```数据集上进行训练：
+```Shell
+python eval.py \
+        --cuda \
+        -d voc \
+        -size 416 \
+        --weight path/to/weight \
+```
