@@ -86,10 +86,10 @@ COCO val 验证集
 
 | Model             |  Input size    |   AP    |   AP50    | Weight|
 |-------------------|----------------|---------|-----------|-------|
-| YOLOv2            |  320×320       |     |       |   -   |
-| YOLOv2            |  416×416       |     |       |   -   |
-| YOLOv2            |  512×512       |     |       |   -   |
-| YOLOv2            |  608×608       |     |       | [github]() |
+| YOLOv2            |  320×320       |  24.1   |   42.8    |   -   |
+| YOLOv2            |  416×416       |  27.2   |   47.3    |   -   |
+| YOLOv2            |  512×512       |  28.8   |   50.0    |   -   |
+| YOLOv2            |  608×608       |  29.7   |   51.7    | [github](https://github.com/yjh0410/PyTorch_YOLOv2/releases/download/yolov2_weight/yolov2_coco.pth) |
 
 大家可以点击表格中的[github]()来下载模型权重文件。
 

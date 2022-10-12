@@ -27,7 +27,7 @@ class YOLOv2(nn.Module):
         self.trainable = trainable
         self.conf_thresh = conf_thresh
         self.nms_thresh = nms_thresh
-        self.stride = 32
+        self.stride = cfg['stride']
         self.topk = topk
 
         # Anchor box config
@@ -35,7 +35,7 @@ class YOLOv2(nn.Module):
         self.num_anchors = len(anchor_size)
         self.anchor_boxes = self.create_grid(input_size)
 
-        # 主干网络：resnet50
+        # 主干网络
         self.backbone, feat_dims = build_backbone(cfg['backbone'], cfg['pretrained'])
         
         # 检测头
@@ -238,7 +238,7 @@ class YOLOv2(nn.Module):
         NC = self.num_classes
 
         # [B, KA * C, H, W] -> [B, H, W, KA * C] -> [B, H*W, KA*C]
-        prediction = prediction.permute(0, 2, 3, 1).contiguous().view(B, H*W, abC)
+        prediction = prediction.permute(0, 2, 3, 1).contiguous().view(B, -1, abC)
 
         # 从pred中分离出objectness预测、类别class预测、bbox的txtytwth预测  
         # [B, H*W, KA*C] -> [B, H*W, KA] -> [B, H*W*KA, 1]
