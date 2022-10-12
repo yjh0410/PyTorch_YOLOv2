@@ -30,6 +30,9 @@ parser.add_argument('--conf_thresh', default=0.1, type=float,
                     help='得分阈值')
 parser.add_argument('--nms_thresh', default=0.50, type=float,
                     help='NMS 阈值')
+parser.add_argument('--topk', default=100, type=int,
+                    help='topk predicted candidates')
+                    
 parser.add_argument('--visual_threshold', default=0.3, type=float,
                     help='用于可视化的阈值参数')
 parser.add_argument('--cuda', action='store_true', default=False, 

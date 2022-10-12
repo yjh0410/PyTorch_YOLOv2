@@ -44,6 +44,8 @@ def parse_args():
                         help='Confidence threshold')
     parser.add_argument('--nms_thresh', default=0.50, type=float,
                         help='NMS threshold')
+    parser.add_argument('--topk', default=1000, type=int,
+                        help='topk predicted candidates')
 
     # 训练配置
     parser.add_argument('--batch_size', default=32, type=int, 

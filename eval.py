@@ -25,6 +25,8 @@ parser.add_argument('--conf_thresh', default=0.001, type=float,
                     help='得分阈值')
 parser.add_argument('--nms_thresh', default=0.50, type=float,
                     help='NMS 阈值')
+parser.add_argument('--topk', default=1000, type=int,
+                    help='topk predicted candidates')
 parser.add_argument('--weight', type=str, default=None, 
                     help='Trained state_dict file path to open')
 
