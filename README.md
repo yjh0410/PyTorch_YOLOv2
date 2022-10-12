@@ -14,6 +14,23 @@ https://zhuanlan.zhihu.com/c_1364967262269693952
 
 https://github.com/yjh0410/PyTorch_YOLO-Family
 
+# 配置环境
+- 我们建议使用anaconda来创建虚拟环境:
+```Shell
+conda create -n yolo python=3.6
+```
+
+- 然后，激活虚拟环境:
+```Shell
+conda activate yolo
+```
+
+- 配置环境:
+运行下方的命令即可一键配置相关的深度学习环境：
+```Shell
+pip install -r requirements.txt 
+```
+如果您已经学习了笔者之前的YOLOv1项目，那么就不需要再次创建该虚拟环境了，二者的环境是可以共用的。
 
 ## 训练所使用的tricks
 
@@ -34,17 +51,48 @@ https://github.com/yjh0410/PyTorch_YOLO-Family
 
 读者可以从下面的百度网盘链接来下载VOC2007和VOC2012数据集
 
-链接：https://pan.baidu.com/s/1tYPGCYGyC0wjpC97H-zzMQ 
+链接：https://pan.baidu.com/s/1qClcQXSXjP8FEnsP_RrZjg 
 
-提取码：4la9
+提取码：zrcj 
 
 读者会获得 ```VOCdevkit.zip```压缩包, 分别包含 ```VOCdevkit/VOC2007``` 和 ```VOCdevkit/VOC2012```两个文件夹，分别是VOC2007数据集和VOC2012数据集.
 
 ### COCO 2017 数据集
 
+* 自己下载
+
 运行 ```sh data/scripts/COCO2017.sh```，将会获得 COCO train2017, val2017, test2017三个数据集.
 
+* 百度网盘下载：
+
+这里，笔者也提供了由笔者下好的COCO数据集的百度网盘链接：
+
+链接：https://pan.baidu.com/s/1XQqeHgNMp8U-ohbEWuT2CA 
+
+提取码：l1e5
+
 ## 实验结果
+VOC2007 test 测试集
+
+| Model             |  Input size  |   mAP   | Weight |
+|-------------------|--------------|---------|--------|
+| YOLOv2            |  320×320     |   64.6  |    -   |
+| YOLOv2            |  416×416     |   77.1  |    -   |
+| YOLOv2            |  512×512     |   78.0  |    -   |
+| YOLOv2            |  608×608     |   73.3  | [github](https://github.com/yjh0410/PyTorch_YOLOv2/releases/download/yolov2_weight/yolov2_voc.pth) |
+
+
+COCO val 验证集
+
+| Model             |  Input size    |   AP    |   AP50    | Weight|
+|-------------------|----------------|---------|-----------|-------|
+| YOLOv2            |  320×320       |   13.7  |   29.6    |   -   |
+| YOLOv2            |  416×416       |   16.4  |   34.7    |   -   |
+| YOLOv2            |  512×512       |   18.1  |   37.9    |   -   |
+| YOLOv2            |  608×608       |   18.6  |   39.0    | [github]() |
+
+
+
 
 COCO val 验证集：
 

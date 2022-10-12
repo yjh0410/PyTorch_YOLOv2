@@ -2,14 +2,11 @@ import os
 import torch
 import argparse
 
-from data.voc0712 import VOCDetection
-from data.coco import COCODataset
 from data.transform import BaseTransform
-
 from evaluator.cocoapi_evaluator import COCOAPIEvaluator
 from evaluator.vocapi_evaluator import VOCAPIEvaluator
-
 from utils.misc import load_weight
+
 from config import build_model_config
 from models.build import build_yolov2
 
