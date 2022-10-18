@@ -37,6 +37,8 @@ parser.add_argument('-vs', '--visual_threshold', default=0.33, type=float,
                     help='用于可视化的阈值参数')
 parser.add_argument('--cuda', action='store_true', default=False, 
                     help='use cuda.')
+parser.add_argument('--save', action='store_true', default=False, 
+                    help='save vis results.')
 
 args = parser.parse_args()
 
