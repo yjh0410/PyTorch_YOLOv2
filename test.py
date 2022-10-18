@@ -86,7 +86,10 @@ def visualize(img,
     return img
         
 
-def test(model, device, testset, transform, thresh, class_colors=None, class_names=None, class_indexs=None, dataset='voc'):
+def test(args, model, device, testset, transform, class_colors=None, class_names=None, class_indexs=None):
+    save_path = os.path.join('det_results/', args.dataset, args.version)
+    os.makedirs(save_path, exist_ok=True)
+
     num_images = len(testset)
     for index in range(num_images):
         print('Testing image {:d}/{:d}....'.format(index+1, num_images))
@@ -107,9 +110,23 @@ def test(model, device, testset, transform, thresh, class_colors=None, class_nam
         bboxes *= scale
 
         # 可视化检测结果
-        img_processed = visualize(img, bboxes, scores, labels, thresh, class_colors, class_names, class_indexs, dataset)
+        img_processed = visualize(
+            img=img,
+            bboxes=bboxes,
+            scores=scores,
+            labels=labels,
+            vis_thresh=args.visual_threshold,
+            class_colors=class_colors,
+            class_names=class_names,
+            class_indexs=class_indexs,
+            dataset_name=args.dataset
+            )
         cv2.imshow('detection', img_processed)
         cv2.waitKey(0)
+
+        # 保存可视化结果
+        if args.save:
+            cv2.imwrite(os.path.join(save_path, str(index).zfill(6) +'.jpg'), img_processed)
 
 
 if __name__ == '__main__':
@@ -171,13 +188,12 @@ if __name__ == '__main__':
     val_transform = BaseTransform(input_size)
 
     # 开始测试
-    test(model=model, 
-        device=device, 
-        testset=dataset,
-        transform=BaseTransform(input_size),
-        thresh=args.visual_threshold,
-        class_colors=class_colors,
-        class_names=class_names,
-        class_indexs=class_indexs,
-        dataset=args.dataset
+    test(args=args,
+         model=model, 
+         device=device, 
+         testset=dataset,
+         transform=val_transform,
+         class_colors=class_colors,
+         class_names=class_names,
+         class_indexs=class_indexs,
         )
