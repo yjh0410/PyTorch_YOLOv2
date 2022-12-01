@@ -51,7 +51,7 @@ class YOLOv2(nn.Module):
         # 检测头
         self.convsets_2 = Conv(cfg['head_dim']+cfg['reorg_dim']*4, cfg['head_dim'], k=3, p=1)
         
-        # 预测曾
+        # 预测层
         self.pred = nn.Conv2d(cfg['head_dim'], self.num_anchors*(1 + 4 + self.num_classes), 1)
 
 
@@ -297,7 +297,7 @@ class YOLOv2(nn.Module):
             txtytwth_pred = prediction[..., (1+NC)*KA:].contiguous().view(B, -1, 4)  
 
             # 解算边界框
-            x1y1x2y2_pred = (self.decode_boxes(txtytwth_pred) / self.input_size).view(-1, 4)
+            x1y1x2y2_pred = (self.decode_boxes(self.anchor_boxes, txtytwth_pred) / self.input_size).view(-1, 4)
             x1y1x2y2_gt = targets[:, :, 7:].view(-1, 4)
 
             # 计算预测框和真实框之间的IoU

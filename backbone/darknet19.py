@@ -76,12 +76,22 @@ class DarkNet_19(nn.Module):
         )
 
     def forward(self, x):
-        c1 = self.conv_1(x)
-        c2 = self.conv_2(c1)
-        c3 = self.conv_3(c2)
-        c3 = self.conv_4(c3)
-        c4 = self.conv_5(self.maxpool_4(c3))
-        c5 = self.conv_6(self.maxpool_5(c4))
+        """
+        Input:
+            x: (Tensor) -> [B, 3, H, W]
+        Output:
+            output: (Dict) {
+                'c3': c3 -> Tensor[B, C3, H/8, W/8],
+                'c4': c4 -> Tensor[B, C4, H/16, W/16],
+                'c5': c5 -> Tensor[B, C5, H/32, W/32],
+            }
+        """
+        c1 = self.conv_1(x)                    # [B, C1, H/2, W/2]
+        c2 = self.conv_2(c1)                   # [B, C2, H/4, W/4]
+        c3 = self.conv_3(c2)                   # [B, C3, H/8, W/8]
+        c3 = self.conv_4(c3)                   # [B, C3, H/8, W/8]
+        c4 = self.conv_5(self.maxpool_4(c3))   # [B, C4, H/16, W/16]
+        c5 = self.conv_6(self.maxpool_5(c4))   # [B, C5, H/32, W/32]
 
         output = {
             'c3': c3,
